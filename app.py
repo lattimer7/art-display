@@ -151,7 +151,13 @@ def generate_and_broadcast_image(prompt):
             model="gpt-4.1",
             input=prompt,
             stream=True,
-            tools=[{"type": "image_generation", "partial_images": config.PARTIAL_IMAGES}],
+            tools=[{"type": "image_generation", 
+                    "partial_images": config.PARTIAL_IMAGES,
+                    "quality":"high",
+                    "moderation":"low",
+                    "size":"1536x1024"
+                    }
+                    ],
         )
         
         # Process stream
