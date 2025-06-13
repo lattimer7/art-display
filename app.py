@@ -9,6 +9,12 @@ import time
 from openai import OpenAI
 import config
 from weather_art import generate_weather_prompt
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("PIL not available - will create simple placeholder")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -21,10 +27,75 @@ client = OpenAI(api_key=config.OPENAI_API_KEY)
 current_image_path = config.CURRENT_IMAGE
 generation_in_progress = False
 
+def create_placeholder_image():
+    """Create a simple placeholder image"""
+    if PIL_AVAILABLE:
+        # Create a gradient background
+        width, height = 1536, 1024
+        img = Image.new('RGB', (width, height))
+        draw = ImageDraw.Draw(img)
+        
+        # Create a gradient from dark blue to purple
+        for y in range(height):
+            r = int(30 + (y / height) * 50)
+            g = int(40 + (y / height) * 30)
+            b = int(80 + (y / height) * 100)
+            draw.rectangle([(0, y), (width, y+1)], fill=(r, g, b))
+        
+        # Add some text
+        try:
+            # Try to use a nice font if available
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 60)
+        except:
+            # Fall back to default font
+            font = ImageFont.load_default()
+        
+        text = "Art Display"
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        
+        # Center the text
+        x = (width - text_width) // 2
+        y = (height - text_height) // 2
+        
+        # Draw text with shadow
+        draw.text((x+3, y+3), text, fill=(0, 0, 0, 128), font=font)
+        draw.text((x, y), text, fill=(255, 255, 255), font=font)
+        
+        # Add subtitle
+        subtitle = "Initializing..."
+        try:
+            subtitle_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
+        except:
+            subtitle_font = ImageFont.load_default()
+        
+        subtitle_bbox = draw.textbbox((0, 0), subtitle, font=subtitle_font)
+        subtitle_width = subtitle_bbox[2] - subtitle_bbox[0]
+        sx = (width - subtitle_width) // 2
+        sy = y + text_height + 40
+        
+        draw.text((sx, sy), subtitle, fill=(200, 200, 200), font=subtitle_font)
+        
+        # Save the image
+        img.save(current_image_path)
+        print(f"Created placeholder image at {current_image_path}")
+    else:
+        # Create a simple 1x1 black pixel as fallback
+        print("Creating minimal placeholder (PIL not available)")
+        with open(current_image_path, 'wb') as f:
+            # PNG header for a 1x1 black image
+            f.write(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x00\x00\x00\x00:~\x9bU\x00\x00\x00\x0bIDATx\x9cc\xf8\x00\x00\x00\x01\x00\x01UU\x86\x18\x00\x00\x00\x00IEND\xaeB`\x82')
+
 def ensure_directories():
     """Ensure all required directories exist"""
     os.makedirs(config.IMAGES_DIR, exist_ok=True)
     os.makedirs('certs', exist_ok=True)
+    
+    # Create placeholder image if none exists
+    if not os.path.exists(current_image_path):
+        print("No current image found, creating placeholder...")
+        create_placeholder_image()
 
 @app.route('/')
 def display():
@@ -41,7 +112,10 @@ def get_current_image():
     """Serve the current display image"""
     if os.path.exists(current_image_path):
         return send_file(current_image_path, mimetype='image/png')
-    return '', 404
+    else:
+        # If somehow the image doesn't exist, create it
+        create_placeholder_image()
+        return send_file(current_image_path, mimetype='image/png')
 
 @socketio.on('generate_image')
 def handle_generate_image(data):
@@ -136,8 +210,23 @@ def handle_connect():
     """Handle client connection"""
     emit('connected', {'message': 'Connected to art display'})
 
+def generate_initial_art():
+    """Generate initial weather-based art on startup"""
+    print("Generating initial weather-based art...")
+    try:
+        from weather_art import generate_weather_art
+        success, message = generate_weather_art()
+        print(message)
+    except Exception as e:
+        print(f"Could not generate weather art: {e}")
+        print("Placeholder image will be used instead")
+
 if __name__ == '__main__':
     ensure_directories()
+    
+    # Try to generate initial art after a short delay
+    # This runs in the background so the server can start immediately
+    threading.Timer(5.0, generate_initial_art).start()
     
     # Create SSL context with modern TLS version
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
