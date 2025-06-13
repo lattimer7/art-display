@@ -100,6 +100,9 @@
                 // Show progress for streaming generation
                 progress.textContent = `Generating... (partial ${data.partial_index + 1})`;
                 progress.classList.add('visible');
+            } else if (data.status === 'changed') {
+                // Image was changed (e.g., previous image loaded)
+                loadCurrentImage();
             }
         });
         

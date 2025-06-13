@@ -73,6 +73,23 @@
             margin-top: 15px;
         }
         
+        .navigation {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .nav-btn {
+            flex: 1;
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+            font-size: 24px;
+            padding: 15px;
+        }
+        
+        .nav-btn:hover {
+            background: linear-gradient(135deg, #5a6578 0%, #3d4758 100%);
+        }
+        
         button:active {
             transform: scale(0.98);
         }
@@ -106,34 +123,6 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
         
-        .inspiration {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .inspiration h3 {
-            font-size: 16px;
-            margin-bottom: 10px;
-            font-weight: 400;
-        }
-        
-        .suggestion {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 10px 15px;
-            border-radius: 10px;
-            margin: 5px 0;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-size: 14px;
-        }
-        
-        .suggestion:active {
-            background: rgba(255, 255, 255, 0.2);
-        }
-        
         .spinner {
             display: inline-block;
             width: 20px;
@@ -151,24 +140,15 @@
 </head>
 <body>
     <div class="container">
-        <h1>Create Art</h1>
-        
-        <div class="inspiration">
-            <h3>Need inspiration? Try:</h3>
-            <div class="suggestion" onclick="setPrompt('A dreamlike cityscape melting into clouds')">
-                A dreamlike cityscape melting into clouds
-            </div>
-            <div class="suggestion" onclick="setPrompt('Neon jellyfish dancing in a cosmic ocean')">
-                Neon jellyfish dancing in a cosmic ocean
-            </div>
-            <div class="suggestion" onclick="setPrompt('Abstract emotions painted in light and shadow')">
-                Abstract emotions painted in light and shadow
-            </div>
-        </div>
+        <h1>Art Display Control</h1>
         
         <div class="input-group">
             <textarea id="prompt" placeholder="Describe your vision..."></textarea>
             <button id="generate" onclick="generateImage()">Generate Art</button>
+            <div class="navigation">
+                <button id="previous" onclick="previousImage()" class="nav-btn">←</button>
+                <button id="next" onclick="nextImage()" class="nav-btn">→</button>
+            </div>
         </div>
         
         <div class="status" id="status">Ready to create</div>
@@ -181,13 +161,10 @@
         const socket = io();
         const promptInput = document.getElementById('prompt');
         const generateBtn = document.getElementById('generate');
+        const previousBtn = document.getElementById('previous');
+        const nextBtn = document.getElementById('next');
         const statusDiv = document.getElementById('status');
         const previewDiv = document.getElementById('preview');
-        
-        function setPrompt(text) {
-            promptInput.value = text;
-            promptInput.focus();
-        }
         
         function generateImage() {
             const prompt = promptInput.value.trim();
@@ -201,6 +178,18 @@
             previewDiv.innerHTML = '';
             
             socket.emit('generate_image', { prompt: prompt });
+        }
+        
+        function previousImage() {
+            previousBtn.disabled = true;
+            statusDiv.textContent = 'Loading previous image...';
+            socket.emit('previous_image');
+        }
+        
+        function nextImage() {
+            nextBtn.disabled = true;
+            statusDiv.textContent = 'Loading next image...';
+            socket.emit('next_image');
         }
         
         socket.on('generation_status', (data) => {
@@ -218,6 +207,24 @@
                 }, 2000);
             } else {
                 statusDiv.textContent = data.message;
+            }
+        });
+        
+        socket.on('previous_status', (data) => {
+            previousBtn.disabled = false;
+            if (data.status === 'success') {
+                statusDiv.textContent = 'Previous image loaded';
+            } else if (data.status === 'error') {
+                statusDiv.textContent = 'Error: ' + data.message;
+            }
+        });
+        
+        socket.on('next_status', (data) => {
+            nextBtn.disabled = false;
+            if (data.status === 'success') {
+                statusDiv.textContent = 'Next image loaded';
+            } else if (data.status === 'error') {
+                statusDiv.textContent = 'Error: ' + data.message;
             }
         });
         

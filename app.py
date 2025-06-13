@@ -6,6 +6,8 @@ import base64
 from datetime import datetime
 import threading
 import time
+import json
+import shutil
 from openai import OpenAI
 import config
 from weather_art import generate_weather_prompt
@@ -26,6 +28,92 @@ client = OpenAI(api_key=config.OPENAI_API_KEY)
 # Current image state
 current_image_path = config.CURRENT_IMAGE
 generation_in_progress = False
+
+# Image history tracking
+IMAGE_HISTORY_FILE = os.path.join(config.BASE_DIR, 'image_history.json')
+MAX_HISTORY = 50  # Keep track of last 50 images
+CURRENT_POSITION_FILE = os.path.join(config.BASE_DIR, 'current_position.json')
+
+def load_current_position():
+    """Load current position in history"""
+    if os.path.exists(CURRENT_POSITION_FILE):
+        try:
+            with open(CURRENT_POSITION_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get('position', 0)
+        except:
+            return 0
+    return 0
+
+def save_current_position(position):
+    """Save current position in history"""
+    with open(CURRENT_POSITION_FILE, 'w') as f:
+        json.dump({'position': position}, f)
+
+def load_image_history():
+    """Load image history from file"""
+    if os.path.exists(IMAGE_HISTORY_FILE):
+        try:
+            with open(IMAGE_HISTORY_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_image_history(history):
+    """Save image history to file"""
+    with open(IMAGE_HISTORY_FILE, 'w') as f:
+        json.dump(history, f)
+
+def add_to_history(image_path):
+    """Add image to history"""
+    history = load_image_history()
+    
+    # Add new image to the front
+    history.insert(0, {
+        'path': image_path,
+        'timestamp': datetime.now().isoformat()
+    })
+    
+    # Keep only MAX_HISTORY items
+    history = history[:MAX_HISTORY]
+    
+    save_image_history(history)
+    
+    # Reset position to 0 when new image is added
+    save_current_position(0)
+    
+    return history
+
+def get_previous_image():
+    """Get the previous image from history"""
+    history = load_image_history()
+    current_pos = load_current_position()
+    
+    # Move to previous position
+    new_pos = current_pos + 1
+    
+    # Check if we have a valid previous image
+    if new_pos < len(history) and os.path.exists(history[new_pos]['path']):
+        save_current_position(new_pos)
+        return history[new_pos]['path']
+    
+    return None
+
+def get_next_image():
+    """Get the next image from history"""
+    history = load_image_history()
+    current_pos = load_current_position()
+    
+    # Move to next position
+    new_pos = current_pos - 1
+    
+    # Check if we have a valid next image
+    if new_pos >= 0 and new_pos < len(history) and os.path.exists(history[new_pos]['path']):
+        save_current_position(new_pos)
+        return history[new_pos]['path']
+    
+    return None
 
 def create_placeholder_image():
     """Create a simple placeholder image"""
@@ -96,6 +184,8 @@ def ensure_directories():
     if not os.path.exists(current_image_path):
         print("No current image found, creating placeholder...")
         create_placeholder_image()
+        add_to_history(current_image_path)
+        save_current_position(0)
 
 @app.route('/')
 def display():
@@ -137,6 +227,68 @@ def handle_generate_image(data):
     # Start generation in background
     thread = threading.Thread(target=generate_and_broadcast_image, args=(full_prompt,))
     thread.start()
+
+@socketio.on('previous_image')
+def handle_previous_image():
+    """Handle request to show previous image"""
+    try:
+        previous_path = get_previous_image()
+        
+        if previous_path and os.path.exists(previous_path):
+            # Copy previous image to current
+            shutil.copy2(previous_path, current_image_path)
+            
+            # Notify all clients
+            socketio.emit('image_update', {
+                'status': 'changed',
+                'message': 'Previous image loaded'
+            })
+            
+            emit('previous_status', {
+                'status': 'success',
+                'message': 'Previous image loaded'
+            })
+        else:
+            emit('previous_status', {
+                'status': 'error',
+                'message': 'No previous image available'
+            })
+    except Exception as e:
+        emit('previous_status', {
+            'status': 'error',
+            'message': f'Error loading previous image: {str(e)}'
+        })
+
+@socketio.on('next_image')
+def handle_next_image():
+    """Handle request to show next image"""
+    try:
+        next_path = get_next_image()
+        
+        if next_path and os.path.exists(next_path):
+            # Copy next image to current
+            shutil.copy2(next_path, current_image_path)
+            
+            # Notify all clients
+            socketio.emit('image_update', {
+                'status': 'changed',
+                'message': 'Next image loaded'
+            })
+            
+            emit('next_status', {
+                'status': 'success',
+                'message': 'Next image loaded'
+            })
+        else:
+            emit('next_status', {
+                'status': 'error',
+                'message': 'No next image available'
+            })
+    except Exception as e:
+        emit('next_status', {
+            'status': 'error',
+            'message': f'Error loading next image: {str(e)}'
+        })
 
 def generate_and_broadcast_image(prompt):
     """Generate image with streaming and broadcast updates"""
@@ -196,6 +348,9 @@ def generate_and_broadcast_image(prompt):
             final_bytes = base64.b64decode(final_image_data)
             with open(archive_path, 'wb') as f:
                 f.write(final_bytes)
+            
+            # Add to history
+            add_to_history(archive_path)
         
         socketio.emit('generation_status', {
             'status': 'complete',
@@ -222,6 +377,14 @@ def generate_initial_art():
     try:
         from weather_art import generate_weather_art
         success, message = generate_weather_art()
+        if success:
+            # Add the weather art to history
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            archive_path = os.path.join(config.IMAGES_DIR, f'weather_art_{timestamp}.png')
+            if os.path.exists(current_image_path):
+                shutil.copy2(current_image_path, archive_path)
+                add_to_history(archive_path)
+                save_current_position(0)
         print(message)
     except Exception as e:
         print(f"Could not generate weather art: {e}")
