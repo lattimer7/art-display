@@ -1,5 +1,9 @@
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # API Keys
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', 'your-openai-api-key')
@@ -21,7 +25,7 @@ CURRENT_IMAGE = os.path.join(IMAGES_DIR, 'current.png')
 
 # Server settings
 HOST = '0.0.0.0'
-PORT = 443
+PORT = 8443  # Changed from 443 to avoid permission issues
 DEBUG = False
 
 # Art generation settings

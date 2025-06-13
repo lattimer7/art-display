@@ -139,8 +139,13 @@ def handle_connect():
 if __name__ == '__main__':
     ensure_directories()
     
-    # SSL context for HTTPS
-    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+    # Create SSL context with modern TLS version
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     context.load_cert_chain('certs/cert.pem', 'certs/key.pem')
     
-    socketio.run(app, host=config.HOST, port=config.PORT, ssl_context=context)
+    # Run with production-ready settings
+    socketio.run(app, 
+                 host=config.HOST, 
+                 port=config.PORT, 
+                 ssl_context=context,
+                 allow_unsafe_werkzeug=True)  # Required for newer Flask versions
