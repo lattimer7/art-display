@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Art Display Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: white;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 300;
+            font-size: 28px;
+        }
+        
+        .input-group {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 15px;
+            padding: 15px;
+            font-size: 16px;
+            color: #333;
+            resize: none;
+            font-family: inherit;
+        }
+        
+        textarea:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+        }
+        
+        button {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 15px;
+        }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .preview {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .preview img {
+            max-width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .inspiration {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .inspiration h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            font-weight: 400;
+        }
+        
+        .suggestion {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+        
+        .suggestion:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Art</h1>
+        
+        <div class="inspiration">
+            <h3>Need inspiration? Try:</h3>
+            <div class="suggestion" onclick="setPrompt('A dreamlike cityscape melting into clouds')">
+                A dreamlike cityscape melting into clouds
+            </div>
+            <div class="suggestion" onclick="setPrompt('Neon jellyfish dancing in a cosmic ocean')">
+                Neon jellyfish dancing in a cosmic ocean
+            </div>
+            <div class="suggestion" onclick="setPrompt('Abstract emotions painted in light and shadow')">
+                Abstract emotions painted in light and shadow
+            </div>
+        </div>
+        
+        <div class="input-group">
+            <textarea id="prompt" placeholder="Describe your vision..."></textarea>
+            <button id="generate" onclick="generateImage()">Generate Art</button>
+        </div>
+        
+        <div class="status" id="status">Ready to create</div>
+        
+        <div class="preview" id="preview"></div>
+    </div>
+    
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        const promptInput = document.getElementById('prompt');
+        const generateBtn = document.getElementById('generate');
+        const statusDiv = document.getElementById('status');
+        const previewDiv = document.getElementById('preview');
+        
+        function setPrompt(text) {
+            promptInput.value = text;
+            promptInput.focus();
+        }
+        
+        function generateImage() {
+            const prompt = promptInput.value.trim();
+            if (!prompt) {
+                statusDiv.textContent = 'Please enter a prompt';
+                return;
+            }
+            
+            generateBtn.disabled = true;
+            statusDiv.innerHTML = '<div class="spinner"></div> Creating your art...';
+            previewDiv.innerHTML = '';
+            
+            socket.emit('generate_image', { prompt: prompt });
+        }
+        
+        socket.on('generation_status', (data) => {
+            if (data.status === 'complete') {
+                statusDiv.textContent = 'Art created successfully!';
+                generateBtn.disabled = false;
+                promptInput.value = '';
+            } else if (data.status === 'error') {
+                statusDiv.textContent = 'Error: ' + data.message;
+                generateBtn.disabled = false;
+            } else if (data.status === 'busy') {
+                statusDiv.textContent = 'Another image is being generated...';
+                setTimeout(() => {
+                    generateBtn.disabled = false;
+                }, 2000);
+            } else {
+                statusDiv.textContent = data.message;
+            }
+        });
+        
+        socket.on('image_update', (data) => {
+            if (data.status === 'partial' && data.image_data) {
+                previewDiv.innerHTML = `<img src="${data.image_data}" alt="Preview">`;
+            }
+        });
+        
+        promptInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                generateImage();
+            }
+        });
+    </script>
+</body>
+</html>

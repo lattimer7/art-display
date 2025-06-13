@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Art Display</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            overflow: hidden;
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #artwork {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 100%;
+            max-height: 100%;
+            opacity: 0;
+            transition: opacity 2s ease-in-out;
+        }
+        
+        #artwork.loaded {
+            opacity: 1;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 24px;
+            opacity: 0.7;
+        }
+        
+        .generation-progress {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        
+        .generation-progress.visible {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">Loading artwork...</div>
+    <img id="artwork" alt="Digital Artwork">
+    <div class="generation-progress" id="progress"></div>
+    
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        const artwork = document.getElementById('artwork');
+        const loading = document.getElementById('loading');
+        const progress = document.getElementById('progress');
+        
+        let partialCount = 0;
+        
+        function loadCurrentImage() {
+            const img = new Image();
+            img.onload = function() {
+                artwork.src = this.src;
+                artwork.classList.add('loaded');
+                loading.style.display = 'none';
+                progress.classList.remove('visible');
+            };
+            img.onerror = function() {
+                setTimeout(loadCurrentImage, 5000);
+            };
+            img.src = '/current-image?' + new Date().getTime();
+        }
+        
+        socket.on('image_update', (data) => {
+            if (data.status === 'partial' && data.image_data) {
+                artwork.src = data.image_data;
+                artwork.classList.add('loaded');
+                loading.style.display = 'none';
+                
+                // Show progress for streaming generation
+                progress.textContent = `Generating... (partial ${data.partial_index + 1})`;
+                progress.classList.add('visible');
+            }
+        });
+        
+        socket.on('generation_status', (data) => {
+            if (data.status === 'starting') {
+                progress.textContent = 'Starting generation...';
+                progress.classList.add('visible');
+                partialCount = 0;
+            } else if (data.status === 'complete') {
+                progress.classList.remove('visible');
+                loadCurrentImage();
+            }
+        });
+        
+        // Initial load
+        loadCurrentImage();
+        
+        // Reload every hour to ensure freshness
+        setInterval(loadCurrentImage, 3600000);
+    </script>
+</body>
+</html>
