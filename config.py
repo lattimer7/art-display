@@ -12,7 +12,7 @@ NYC_LON = -74.0060
 # Display settings
 DISPLAY_WIDTH = 1920
 DISPLAY_HEIGHT = 1080
-IMAGE_GENERATION_SIZE = "1024x1024"  # OpenAI supports 1024x1024, 1792x1024, or 1024x1792
+IMAGE_GENERATION_SIZE = "1536x1024"  # OpenAI supports 1024x1024, 1792x1024, or 1024x1792
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,3 +27,4 @@ DEBUG = False
 # Art generation settings
 MORNING_GENERATION_TIME = "07:00"  # 7 AM
 DEFAULT_STYLE = "ethereal digital art, cinematic lighting, highly detailed"
+PARTIAL_IMAGES = 3  # Number of partial images to receive during streaming (1-10)
